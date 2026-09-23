@@ -11,7 +11,7 @@
 // IMPORTANT:
 // Replace this with YOUR Spotify Client ID.
 
-const CLIENT_ID = "509e2e82b41a461fbeecaffdb678503f"; 
+const CLIENT_ID="509e2e82b41a461fbeecaffdb678503f";
 
 
 // This must EXACTLY match the Redirect URI
@@ -1186,6 +1186,693 @@ function initializeSpotifyPlayer() {
     );
 
 
+    spotifyPlayer.addListener(
+        "not_ready",
+        ({ device_id }) => {
+
+            console.log(
+                "Spotify device went offline:",
+                device_id
+            );
+
+            spotifyStatus.textContent =
+                "Spotify player offline";
+
+        }
+    );
+
+
+    spotifyPlayer.addListener(
+        "player_state_changed",
+        state => {
+
+            if (!state) {
+
+                return;
+
+            }
+
+
+            currentState =
+                state;
+
+
+            updatePlayerFromState(
+                state
+            );
+
+        }
+    );
+
+
+    spotifyPlayer.addListener(
+        "initialization_error",
+        ({ message }) => {
+
+            console.error(
+                "Spotify initialization error:",
+                message
+            );
+
+        }
+    );
+
+
+    spotifyPlayer.addListener(
+        "authentication_error",
+        ({ message }) => {
+
+            console.error(
+                "Spotify authentication error:",
+                message
+            );
+
+            spotifyStatus.textContent =
+                "Spotify authentication failed";
+
+        }
+    );
+
+
+    spotifyPlayer.addListener(
+        "account_error",
+        ({ message }) => {
+
+            console.error(
+                "Spotify account error:",
+                message
+            );
+
+            spotifyStatus.textContent =
+                "Spotify Premium is required for playback";
+
+        }
+    );
+
+
     spotifyPlayer.connect();
+
+}
+
+
+// =====================================================
+// SPOTIFY SDK READY
+// =====================================================
+
+window.onSpotifyWebPlaybackSDKReady =
+    function () {
+
+        console.log(
+            "Spotify Web Playback SDK loaded."
+        );
+
+
+        if (accessToken) {
+
+            initializeSpotifyPlayer();
+
+        }
+
+    };
+
+
+// =====================================================
+// PLAY TRACK
+// =====================================================
+
+async function playTrack(index) {
+
+    if (!accessToken) {
+
+        connectSpotify();
+
+        return;
+
+    }
+
+
+    if (!deviceId) {
+
+        alert(
+            "Spotify player is still connecting. Please try again in a moment."
+        );
+
+        return;
+
+    }
+
+
+    const track =
+        tracks[index];
+
+
+    if (!track) {
+
+        return;
+
+    }
+
+
+    currentTrackIndex =
+        index;
+
+
+    try {
+
+        await spotifyFetch(
+            `https://api.spotify.com/v1/me/player?device_id=${encodeURIComponent(deviceId)}&play=true`,
+            {
+
+                method: "PUT",
+
+                headers: {
+
+                    "Content-Type":
+                        "application/json"
+
+                }
+
+            }
+        );
+
+
+        const response =
+            await spotifyFetch(
+                "https://api.spotify.com/v1/me/player/play",
+                {
+
+                    method: "PUT",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body: JSON.stringify({
+
+                        uris: [
+                            track.uri
+                        ]
+
+                    })
+
+                }
+            );
+
+
+        if (!response.ok) {
+
+            const data =
+                await response.json()
+                    .catch(() => ({}));
+
+
+            throw new Error(
+                data.error?.message ||
+                "Unable to start playback."
+            );
+
+        }
+
+
+        updateCurrentTrack(track);
+
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert(
+            error.message
+        );
+
+    }
+
+}
+
+
+// =====================================================
+// PLAY / PAUSE
+// =====================================================
+
+async function togglePlayback() {
+
+    if (!spotifyPlayer) {
+
+        alert(
+            "Connect Spotify first."
+        );
+
+        return;
+
+    }
+
+
+    await spotifyPlayer.togglePlay();
+
+}
+
+
+// =====================================================
+// NEXT
+// =====================================================
+
+async function nextTrack() {
+
+    if (!spotifyPlayer) {
+
+        return;
+
+    }
+
+
+    await spotifyPlayer.nextTrack();
+
+}
+
+
+// =====================================================
+// PREVIOUS
+// =====================================================
+
+async function previousTrack() {
+
+    if (!spotifyPlayer) {
+
+        return;
+
+    }
+
+
+    await spotifyPlayer.previousTrack();
+
+}
+
+
+// =====================================================
+// SEEK
+// =====================================================
+
+async function seekPlayback() {
+
+    if (!spotifyPlayer || !currentState) {
+
+        return;
+
+    }
+
+
+    const durationMs =
+        currentState.duration;
+
+    const percentage =
+        Number(
+            progressBar.value
+        ) / 100;
+
+
+    const position =
+        Math.floor(
+            durationMs * percentage
+        );
+
+
+    await spotifyPlayer.seek(
+        position
+    );
+
+}
+
+
+// =====================================================
+// PLAYER STATE
+// =====================================================
+
+function updatePlayerFromState(state) {
+
+    const track =
+        state.track_window
+            ?.current_track;
+
+
+    if (!track) {
+
+        return;
+
+    }
+
+
+    updateCurrentTrack(track);
+
+
+    playButton.textContent =
+        state.paused
+            ? "▶"
+            : "Ⅱ";
+
+
+    const position =
+        state.position || 0;
+
+    const durationMs =
+        state.duration || 0;
+
+
+    progressBar.value =
+        durationMs
+            ? (position / durationMs) * 100
+            : 0;
+
+
+    currentTime.textContent =
+        formatTime(position);
+
+
+    duration.textContent =
+        formatTime(durationMs);
+
+}
+
+
+// =====================================================
+// UPDATE CURRENT TRACK
+// =====================================================
+
+function updateCurrentTrack(track) {
+
+    if (!track) {
+
+        return;
+
+    }
+
+
+    currentTitle.textContent =
+        track.name;
+
+
+    currentArtist.textContent =
+        track.artists
+            .map(
+                artist => artist.name
+            )
+            .join(", ");
+
+
+    if (
+        track.album &&
+        track.album.images &&
+        track.album.images.length
+    ) {
+
+        currentArtwork.src =
+            track.album.images[0].url;
+
+    }
+
+}
+
+
+// =====================================================
+// FORMAT TIME
+// =====================================================
+
+function formatTime(milliseconds) {
+
+    const seconds =
+        Math.floor(
+            milliseconds / 1000
+        );
+
+
+    const minutes =
+        Math.floor(
+            seconds / 60
+        );
+
+
+    const remaining =
+        seconds % 60;
+
+
+    return `${minutes}:${String(remaining).padStart(2, "0")}`;
+
+}
+
+
+// =====================================================
+// FAVORITES
+// =====================================================
+
+function toggleFavorite(index) {
+
+    const track =
+        tracks[index];
+
+
+    if (!track) {
+
+        return;
+
+    }
+
+
+    const existing =
+        favorites.indexOf(
+            track.id
+        );
+
+
+    if (existing >= 0) {
+
+        favorites.splice(
+            existing,
+            1
+        );
+
+    } else {
+
+        favorites.push(
+            track.id
+        );
+
+    }
+
+
+    localStorage.setItem(
+        "vibestreamFavorites",
+        JSON.stringify(favorites)
+    );
+
+
+    displayTracks();
+
+}
+
+
+// =====================================================
+// PROFILE
+// =====================================================
+
+async function getProfile() {
+
+    try {
+
+        const response =
+            await spotifyFetch(
+                "https://api.spotify.com/v1/me"
+            );
+
+
+        const profile =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            return;
+
+        }
+
+
+        spotifyStatus.textContent =
+            `Connected as ${profile.display_name || "Spotify user"}`;
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+    }
+
+}
+
+
+// =====================================================
+// UI
+// =====================================================
+
+function updateSpotifyUI() {
+
+    spotifyBtn.textContent =
+        "✓ Spotify Connected";
+
+    spotifyBtn.style.background =
+        "#1ed760";
+
+    connectMainBtn.style.display =
+        "none";
+
+    spotifyStatus.textContent =
+        "Spotify connected";
+
+}
+
+
+function showWelcome() {
+
+    musicList.innerHTML = `
+
+        <div class="welcome-card">
+
+            <div class="welcome-icon">
+                🎧
+            </div>
+
+            <h3>
+                Welcome to VibeStream
+            </h3>
+
+            <p>
+                Connect your Spotify account
+                to search and play music.
+            </p>
+
+            <button
+                class="connect-main-btn"
+                id="connectAgainBtn"
+                type="button"
+            >
+                Connect Spotify
+            </button>
+
+        </div>
+
+    `;
+
+
+    const button =
+        document.getElementById(
+            "connectAgainBtn"
+        );
+
+
+    if (button) {
+
+        button.addEventListener(
+            "click",
+            connectSpotify
+        );
+
+    }
+
+}
+
+
+// =====================================================
+// LOGOUT
+// =====================================================
+
+function logoutSpotify() {
+
+    accessToken = null;
+
+    refreshToken = null;
+
+    expiresAt = 0;
+
+    deviceId = null;
+
+
+    localStorage.removeItem(
+        "vibestream_access_token"
+    );
+
+    localStorage.removeItem(
+        "vibestream_refresh_token"
+    );
+
+    localStorage.removeItem(
+        "vibestream_expires_at"
+    );
+
+
+    if (spotifyPlayer) {
+
+        spotifyPlayer.disconnect();
+
+        spotifyPlayer = null;
+
+    }
+
+
+    spotifyBtn.textContent =
+        "🎵 Connect Spotify";
+
+
+    spotifyStatus.textContent =
+        "Spotify not connected";
+
+
+    showWelcome();
+
+}
+
+
+// =====================================================
+// CLEAN URL
+// =====================================================
+
+function cleanUrl() {
+
+    window.history.replaceState(
+        {},
+        document.title,
+        REDIRECT_URI
+    );
+
+}
+
+
+// =====================================================
+// HTML ESCAPING
+// =====================================================
+
+function escapeHtml(value) {
+
+    return String(value)
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 
 }
