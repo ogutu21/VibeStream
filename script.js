@@ -1,22 +1,41 @@
 // =====================================================
 // VIBESTREAM
-// Online Music Player
+// SPOTIFY + PKCE + WEB PLAYBACK SDK
 // =====================================================
 
 
 // =====================================================
-// JAMENDO API
+// SPOTIFY CONFIGURATION
 // =====================================================
 
-const CLIENT_ID = "17af633d";
+// IMPORTANT:
+// Replace this with YOUR Spotify Client ID.
+
+const CLIENT_ID = "509e2e82b41a461fbeecaffdb678503f"; 
+
+
+// This must EXACTLY match the Redirect URI
+// registered in your Spotify Developer Dashboard.
+
+const REDIRECT_URI =
+    "https://ogutu21.github.io/VibeStream/";
+
+
+// Spotify permissions
+
+const SCOPES = [
+    "streaming",
+    "user-read-private",
+    "user-read-email",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing"
+].join(" ");
 
 
 // =====================================================
 // ELEMENTS
 // =====================================================
-
-const audioPlayer =
-    document.getElementById("audioPlayer");
 
 const searchInput =
     document.getElementById("searchInput");
@@ -60,35 +79,808 @@ const volumeBar =
 const discoverBtn =
     document.getElementById("discoverBtn");
 
+const spotifyBtn =
+    document.getElementById("spotifyBtn");
+
+const connectMainBtn =
+    document.getElementById("connectMainBtn");
+
+const spotifyStatus =
+    document.getElementById("spotifyStatus");
+
+const resultsText =
+    document.getElementById("resultsText");
+
 
 // =====================================================
 // VARIABLES
 // =====================================================
 
+let accessToken = null;
+
+let refreshToken = null;
+
+let expiresAt = 0;
+
+let spotifyPlayer = null;
+
+let deviceId = null;
+
 let tracks = [];
 
 let currentTrackIndex = -1;
 
+let currentState = null;
 
-// =====================================================
-// INITIAL AUDIO SETTINGS
-// =====================================================
-
-audioPlayer.volume = 1;
-
-volumeBar.value = 1;
+let favorites =
+    JSON.parse(
+        localStorage.getItem("vibestreamFavorites") || "[]"
+    );
 
 
 // =====================================================
-// SEARCH MUSIC
+// INITIALIZATION
+// =====================================================
+
+document.addEventListener("DOMContentLoaded", async () => {
+
+    volumeBar.value = 1;
+
+    setupEvents();
+
+    await handleSpotifyCallback();
+
+    loadSavedToken();
+
+    if (accessToken) {
+
+        updateSpotifyUI();
+
+        initializeSpotifyPlayer();
+
+        searchMusic("popular music");
+
+    } else {
+
+        showWelcome();
+
+    }
+
+});
+
+
+// =====================================================
+// EVENTS
+// =====================================================
+
+function setupEvents() {
+
+    searchBtn.addEventListener(
+        "click",
+        () => searchMusic(searchInput.value)
+    );
+
+
+    searchInput.addEventListener(
+        "keydown",
+        event => {
+
+            if (event.key === "Enter") {
+
+                searchMusic(searchInput.value);
+
+            }
+
+        }
+    );
+
+
+    spotifyBtn.addEventListener(
+        "click",
+        connectSpotify
+    );
+
+
+    connectMainBtn.addEventListener(
+        "click",
+        connectSpotify
+    );
+
+
+    discoverBtn.addEventListener(
+        "click",
+        () => {
+
+            searchInput.focus();
+
+            searchMusic("popular music");
+
+        }
+    );
+
+
+    playButton.addEventListener(
+        "click",
+        togglePlayback
+    );
+
+
+    previousButton.addEventListener(
+        "click",
+        previousTrack
+    );
+
+
+    nextButton.addEventListener(
+        "click",
+        nextTrack
+    );
+
+
+    volumeBar.addEventListener(
+        "input",
+        () => {
+
+            if (spotifyPlayer) {
+
+                spotifyPlayer.setVolume(
+                    Number(volumeBar.value)
+                );
+
+            }
+
+        }
+    );
+
+
+    progressBar.addEventListener(
+        "input",
+        seekPlayback
+    );
+
+
+    window.addEventListener(
+        "beforeunload",
+        () => {
+
+            if (accessToken) {
+
+                localStorage.setItem(
+                    "vibestream_access_token",
+                    accessToken
+                );
+
+            }
+
+        }
+    );
+
+}
+
+
+// =====================================================
+// PKCE
+// =====================================================
+
+function generateRandomString(length) {
+
+    const characters =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    let result = "";
+
+    const values =
+        crypto.getRandomValues(
+            new Uint8Array(length)
+        );
+
+    for (let i = 0; i < length; i++) {
+
+        result +=
+            characters[
+                values[i] % characters.length
+            ];
+
+    }
+
+    return result;
+}
+
+
+async function generateCodeChallenge(verifier) {
+
+    const data =
+        new TextEncoder().encode(verifier);
+
+    const digest =
+        await crypto.subtle.digest(
+            "SHA-256",
+            data
+        );
+
+    return base64UrlEncode(digest);
+
+}
+
+
+function base64UrlEncode(buffer) {
+
+    return btoa(
+        String.fromCharCode(
+            ...new Uint8Array(buffer)
+        )
+    )
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+}
+
+
+// =====================================================
+// CONNECT SPOTIFY
+// =====================================================
+
+async function connectSpotify() {
+
+    if (
+        !CLIENT_ID ||
+        CLIENT_ID === "YOUR_SPOTIFY_CLIENT_ID"
+    ) {
+
+        alert(
+            "Add your Spotify Client ID to script.js first."
+        );
+
+        return;
+
+    }
+
+
+    const codeVerifier =
+        generateRandomString(64);
+
+    const codeChallenge =
+        await generateCodeChallenge(
+            codeVerifier
+        );
+
+
+    localStorage.setItem(
+        "spotify_code_verifier",
+        codeVerifier
+    );
+
+
+    const state =
+        generateRandomString(16);
+
+    localStorage.setItem(
+        "spotify_state",
+        state
+    );
+
+
+    const params =
+        new URLSearchParams({
+
+            response_type: "code",
+
+            client_id: CLIENT_ID,
+
+            scope: SCOPES,
+
+            redirect_uri: REDIRECT_URI,
+
+            state: state,
+
+            code_challenge_method: "S256",
+
+            code_challenge: codeChallenge
+
+        });
+
+
+    window.location.href =
+        "https://accounts.spotify.com/authorize?" +
+        params.toString();
+
+}
+
+
+// =====================================================
+// HANDLE SPOTIFY CALLBACK
+// =====================================================
+
+async function handleSpotifyCallback() {
+
+    const params =
+        new URLSearchParams(
+            window.location.search
+        );
+
+    const code =
+        params.get("code");
+
+    const state =
+        params.get("state");
+
+    const error =
+        params.get("error");
+
+
+    if (error) {
+
+        alert(
+            "Spotify authorization was cancelled."
+        );
+
+        cleanUrl();
+
+        return;
+
+    }
+
+
+    if (!code) {
+
+        return;
+
+    }
+
+
+    const savedState =
+        localStorage.getItem(
+            "spotify_state"
+        );
+
+
+    if (
+        !state ||
+        state !== savedState
+    ) {
+
+        alert(
+            "Spotify security verification failed."
+        );
+
+        cleanUrl();
+
+        return;
+
+    }
+
+
+    const codeVerifier =
+        localStorage.getItem(
+            "spotify_code_verifier"
+        );
+
+
+    if (!codeVerifier) {
+
+        alert(
+            "Spotify login information is missing. Please connect again."
+        );
+
+        cleanUrl();
+
+        return;
+
+    }
+
+
+    try {
+
+        const body =
+            new URLSearchParams({
+
+                client_id: CLIENT_ID,
+
+                grant_type:
+                    "authorization_code",
+
+                code: code,
+
+                redirect_uri:
+                    REDIRECT_URI,
+
+                code_verifier:
+                    codeVerifier
+
+            });
+
+
+        const response =
+            await fetch(
+                "https://accounts.spotify.com/api/token",
+                {
+
+                    method: "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/x-www-form-urlencoded"
+
+                    },
+
+                    body: body
+
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            console.error(data);
+
+            throw new Error(
+                data.error_description ||
+                "Spotify token request failed."
+            );
+
+        }
+
+
+        accessToken =
+            data.access_token;
+
+
+        refreshToken =
+            data.refresh_token || null;
+
+
+        expiresAt =
+            Date.now() +
+            (data.expires_in * 1000);
+
+
+        saveToken();
+
+
+        localStorage.removeItem(
+            "spotify_code_verifier"
+        );
+
+        localStorage.removeItem(
+            "spotify_state"
+        );
+
+
+        cleanUrl();
+
+
+        updateSpotifyUI();
+
+
+        initializeSpotifyPlayer();
+
+
+        getProfile();
+
+
+        searchMusic("popular music");
+
+
+    } catch (error) {
+
+        console.error(error);
+
+        alert(
+            "Spotify connection failed. Check your Client ID and Redirect URI."
+        );
+
+        cleanUrl();
+
+    }
+
+}
+
+
+// =====================================================
+// SAVE TOKEN
+// =====================================================
+
+function saveToken() {
+
+    localStorage.setItem(
+        "vibestream_access_token",
+        accessToken
+    );
+
+
+    localStorage.setItem(
+        "vibestream_expires_at",
+        String(expiresAt)
+    );
+
+
+    if (refreshToken) {
+
+        localStorage.setItem(
+            "vibestream_refresh_token",
+            refreshToken
+        );
+
+    }
+
+}
+
+
+// =====================================================
+// LOAD TOKEN
+// =====================================================
+
+function loadSavedToken() {
+
+    accessToken =
+        localStorage.getItem(
+            "vibestream_access_token"
+        );
+
+
+    refreshToken =
+        localStorage.getItem(
+            "vibestream_refresh_token"
+        );
+
+
+    expiresAt =
+        Number(
+            localStorage.getItem(
+                "vibestream_expires_at"
+            ) || 0
+        );
+
+
+    if (
+        accessToken &&
+        expiresAt &&
+        Date.now() >= expiresAt
+    ) {
+
+        refreshAccessToken();
+
+    }
+
+}
+
+
+// =====================================================
+// REFRESH TOKEN
+// =====================================================
+
+async function refreshAccessToken() {
+
+    if (!refreshToken) {
+
+        logoutSpotify();
+
+        return;
+
+    }
+
+
+    try {
+
+        const body =
+            new URLSearchParams({
+
+                grant_type:
+                    "refresh_token",
+
+                refresh_token:
+                    refreshToken,
+
+                client_id:
+                    CLIENT_ID
+
+            });
+
+
+        const response =
+            await fetch(
+                "https://accounts.spotify.com/api/token",
+                {
+
+                    method: "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/x-www-form-urlencoded"
+
+                    },
+
+                    body: body
+
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error_description ||
+                "Token refresh failed."
+            );
+
+        }
+
+
+        accessToken =
+            data.access_token;
+
+
+        expiresAt =
+            Date.now() +
+            (data.expires_in * 1000);
+
+
+        if (data.refresh_token) {
+
+            refreshToken =
+                data.refresh_token;
+
+        }
+
+
+        saveToken();
+
+
+    } catch (error) {
+
+        console.error(error);
+
+        logoutSpotify();
+
+    }
+
+}
+
+
+// =====================================================
+// ENSURE TOKEN
+// =====================================================
+
+async function ensureToken() {
+
+    if (!accessToken) {
+
+        return false;
+
+    }
+
+
+    if (
+        expiresAt &&
+        Date.now() >= expiresAt - 60000
+    ) {
+
+        await refreshAccessToken();
+
+    }
+
+
+    return !!accessToken;
+
+}
+
+
+// =====================================================
+// SPOTIFY API
+// =====================================================
+
+async function spotifyFetch(
+    url,
+    options = {}
+) {
+
+    await ensureToken();
+
+
+    if (!accessToken) {
+
+        throw new Error(
+            "Spotify is not connected."
+        );
+
+    }
+
+
+    const response =
+        await fetch(
+            url,
+            {
+
+                ...options,
+
+                headers: {
+
+                    ...(options.headers || {}),
+
+                    Authorization:
+                        `Bearer ${accessToken}`
+
+                }
+
+            }
+        );
+
+
+    if (
+        response.status === 401
+    ) {
+
+        await refreshAccessToken();
+
+        if (!accessToken) {
+
+            throw new Error(
+                "Spotify session expired."
+            );
+
+        }
+
+
+        return fetch(
+            url,
+            {
+
+                ...options,
+
+                headers: {
+
+                    ...(options.headers || {}),
+
+                    Authorization:
+                        `Bearer ${accessToken}`
+
+                }
+
+            }
+        );
+
+    }
+
+
+    return response;
+
+}
+
+
+// =====================================================
+// SEARCH SPOTIFY
 // =====================================================
 
 async function searchMusic(query) {
 
-    query = query.trim();
+    if (!accessToken) {
 
-    if (query === "") {
-        query = "electronic";
+        showWelcome();
+
+        return;
+
+    }
+
+
+    query =
+        query.trim();
+
+
+    if (!query) {
+
+        query = "popular music";
+
     }
 
 
@@ -98,9 +890,7 @@ async function searchMusic(query) {
 
             <div class="loading-spinner"></div>
 
-            <p>
-                Searching for music...
-            </p>
+            <p>Searching Spotify...</p>
 
         </div>
 
@@ -109,82 +899,65 @@ async function searchMusic(query) {
 
     try {
 
-        const url =
-            "https://api.jamendo.com/v3.0/tracks/" +
-            "?client_id=" +
-            encodeURIComponent(CLIENT_ID) +
-            "&format=json" +
-            "&limit=24" +
-            "&audioformat=mp32" +
-            "&imagesize=300" +
-            "&search=" +
-            encodeURIComponent(query);
-
-
         const response =
-            await fetch(url);
+            await spotifyFetch(
+                "https://api.spotify.com/v1/search?" +
+                new URLSearchParams({
 
+                    q: query,
 
-        if (!response.ok) {
+                    type: "track",
 
-            throw new Error(
-                "API request failed"
+                    limit: "30"
+
+                })
             );
-
-        }
 
 
         const data =
             await response.json();
 
 
-        if (
-            !data.results ||
-            data.results.length === 0
-        ) {
+        if (!response.ok) {
 
-            tracks = [];
+            throw new Error(
+                data.error?.message ||
+                "Spotify search failed."
+            );
 
-            musicList.innerHTML = `
-
-                <div class="loading">
-
-                    <p>
-                        No music found.
-                    </p>
-
-                </div>
-
-            `;
-
-            return;
         }
 
 
-        tracks = data.results;
+        tracks =
+            data.tracks.items || [];
+
+
+        resultsText.textContent =
+            `${tracks.length} tracks found for "${query}"`;
 
 
         displayTracks();
 
-    }
 
-    catch (error) {
+    } catch (error) {
 
         console.error(error);
 
-
         musicList.innerHTML = `
 
-            <div class="loading">
+            <div class="welcome-card">
+
+                <div class="welcome-icon">
+                    ⚠️
+                </div>
+
+                <h3>
+                    Spotify search failed
+                </h3>
 
                 <p>
-                    Unable to load music.
+                    ${escapeHtml(error.message)}
                 </p>
-
-                <small>
-                    Check your internet connection
-                    and API Client ID.
-                </small>
 
             </div>
 
@@ -201,147 +974,145 @@ async function searchMusic(query) {
 
 function displayTracks() {
 
-    musicList.innerHTML = "";
+    if (!tracks.length) {
 
+        musicList.innerHTML = `
 
-    tracks.forEach(
-        (track, index) => {
+            <div class="welcome-card">
 
-            const card =
-                document.createElement("div");
-
-
-            card.className =
-                "song-card";
-
-
-            const artwork =
-                track.album_image ||
-                track.image ||
-                "https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=500&q=80";
-
-
-            card.innerHTML = `
-
-                <img
-                    src="${escapeHTML(artwork)}"
-                    alt="Album artwork"
-                    loading="lazy"
-                >
-
-                <div class="song-info">
-
-                    <h3>
-                        ${escapeHTML(
-                            track.name ||
-                            "Unknown Song"
-                        )}
-                    </h3>
-
-                    <p>
-                        ${escapeHTML(
-                            track.artist_name ||
-                            "Unknown Artist"
-                        )}
-                    </p>
-
-                    <small>
-                        ${escapeHTML(
-                            track.album_name ||
-                            "Single"
-                        )}
-                    </small>
-
+                <div class="welcome-icon">
+                    🎵
                 </div>
 
-                <button
-                    class="play-btn"
-                    type="button"
-                    title="Play"
-                >
-                    ▶
-                </button>
+                <h3>
+                    No tracks found
+                </h3>
 
-            `;
+                <p>
+                    Try another artist, song or keyword.
+                </p>
+
+            </div>
+
+        `;
+
+        return;
+
+    }
 
 
-            const playBtn =
-                card.querySelector(
-                    ".play-btn"
-                );
+    musicList.innerHTML =
+        tracks.map(
+            (track, index) => {
+
+                const artwork =
+                    track.album?.images?.[0]?.url ||
+                    "https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=500&q=80";
 
 
-            playBtn.addEventListener(
+                const artist =
+                    track.artists
+                        .map(
+                            artist => artist.name
+                        )
+                        .join(", ");
+
+
+                const liked =
+                    favorites.includes(
+                        track.id
+                    );
+
+
+                return `
+
+                    <article
+                        class="song-card"
+                    >
+
+                        <button
+                            class="favorite-btn ${liked ? "active" : ""}"
+                            data-favorite="${index}"
+                            title="Favorite"
+                        >
+                            ${liked ? "♥" : "♡"}
+                        </button>
+
+
+                        <img
+                            src="${artwork}"
+                            alt="${escapeHtml(track.name)}"
+                        >
+
+
+                        <h3>
+                            ${escapeHtml(track.name)}
+                        </h3>
+
+
+                        <p>
+                            ${escapeHtml(artist)}
+                        </p>
+
+
+                        <small>
+                            ${escapeHtml(track.album?.name || "")}
+                        </small>
+
+
+                        <button
+                            class="play-btn"
+                            data-play="${index}"
+                            title="Play"
+                        >
+                            ▶
+                        </button>
+
+                    </article>
+
+                `;
+
+            }
+        ).join("");
+
+
+    document
+        .querySelectorAll("[data-play]")
+        .forEach(button => {
+
+            button.addEventListener(
                 "click",
-                function () {
+                () => {
+
+                    const index =
+                        Number(
+                            button.dataset.play
+                        );
 
                     playTrack(index);
 
                 }
             );
 
-
-            musicList.appendChild(card);
-
-        }
-    );
-
-}
+        });
 
 
-// =====================================================
-// PLAY TRACK
-// =====================================================
+    document
+        .querySelectorAll("[data-favorite]")
+        .forEach(button => {
 
-function playTrack(index) {
+            button.addEventListener(
+                "click",
+                () => {
 
-    if (
-        index < 0 ||
-        index >= tracks.length
-    ) {
-        return;
-    }
+                    const index =
+                        Number(
+                            button.dataset.favorite
+                        );
 
+                    toggleFavorite(index);
 
-    const track =
-        tracks[index];
-
-
-    if (!track.audio) {
-
-        console.error(
-            "No audio URL available."
-        );
-
-        return;
-    }
-
-
-    currentTrackIndex =
-        index;
-
-
-    audioPlayer.src =
-        track.audio;
-
-
-    updateCurrentSong(track);
-
-
-    progressBar.value = 0;
-
-
-    audioPlayer.play()
-        .then(function () {
-
-            updatePlayButton();
-
-        })
-        .catch(function (error) {
-
-            console.error(
-                "Playback failed:",
-                error
+                }
             );
 
         });
@@ -350,382 +1121,71 @@ function playTrack(index) {
 
 
 // =====================================================
-// CURRENT SONG
+// INITIALIZE SPOTIFY PLAYER
 // =====================================================
 
-function updateCurrentSong(track) {
-
-    currentTitle.textContent =
-        track.name ||
-        "Unknown Song";
-
-
-    currentArtist.textContent =
-        track.artist_name ||
-        "Unknown Artist";
-
-
-    currentArtwork.src =
-        track.album_image ||
-        track.image ||
-        "https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=500&q=80";
-
-}
-
-
-// =====================================================
-// PLAY / PAUSE
-// =====================================================
-
-function togglePlay() {
-
-    if (!audioPlayer.src) {
-
-        if (tracks.length > 0) {
-
-            playTrack(0);
-
-        }
-
-        return;
-    }
-
-
-    if (audioPlayer.paused) {
-
-        audioPlayer.play();
-
-    } else {
-
-        audioPlayer.pause();
-
-    }
-
-}
-
-
-// =====================================================
-// PLAY BUTTON
-// =====================================================
-
-function updatePlayButton() {
-
-    if (audioPlayer.paused) {
-
-        playButton.textContent = "▶";
-
-    } else {
-
-        playButton.textContent = "⏸";
-
-    }
-
-}
-
-
-// =====================================================
-// NEXT TRACK
-// =====================================================
-
-function nextTrack() {
-
-    if (tracks.length === 0) {
-        return;
-    }
-
-
-    let nextIndex =
-        currentTrackIndex + 1;
-
+function initializeSpotifyPlayer() {
 
     if (
-        nextIndex >= tracks.length
+        typeof Spotify === "undefined"
     ) {
 
-        nextIndex = 0;
-
-    }
-
-
-    playTrack(nextIndex);
-
-}
-
-
-// =====================================================
-// PREVIOUS TRACK
-// =====================================================
-
-function previousTrack() {
-
-    if (tracks.length === 0) {
-        return;
-    }
-
-
-    let previousIndex =
-        currentTrackIndex - 1;
-
-
-    if (previousIndex < 0) {
-
-        previousIndex =
-            tracks.length - 1;
-
-    }
-
-
-    playTrack(previousIndex);
-
-}
-
-
-// =====================================================
-// PROGRESS
-// =====================================================
-
-audioPlayer.addEventListener(
-    "loadedmetadata",
-    function () {
-
-        if (
-            Number.isFinite(
-                audioPlayer.duration
-            )
-        ) {
-
-            progressBar.max =
-                audioPlayer.duration;
-
-
-            duration.textContent =
-                formatTime(
-                    audioPlayer.duration
-                );
-
-        }
-
-    }
-);
-
-
-audioPlayer.addEventListener(
-    "timeupdate",
-    function () {
-
-        if (
-            Number.isFinite(
-                audioPlayer.duration
-            )
-        ) {
-
-            progressBar.value =
-                audioPlayer.currentTime;
-
-
-            currentTime.textContent =
-                formatTime(
-                    audioPlayer.currentTime
-                );
-
-        }
-
-    }
-);
-
-
-// =====================================================
-// SEEK
-// =====================================================
-
-progressBar.addEventListener(
-    "input",
-    function () {
-
-        audioPlayer.currentTime =
-            Number(progressBar.value);
-
-    }
-);
-
-
-// =====================================================
-// VOLUME
-// =====================================================
-
-volumeBar.addEventListener(
-    "input",
-    function () {
-
-        audioPlayer.volume =
-            Number(volumeBar.value);
-
-    }
-);
-
-
-// =====================================================
-// AUDIO EVENTS
-// =====================================================
-
-audioPlayer.addEventListener(
-    "play",
-    function () {
-
-        updatePlayButton();
-
-    }
-);
-
-
-audioPlayer.addEventListener(
-    "pause",
-    function () {
-
-        updatePlayButton();
-
-    }
-);
-
-
-audioPlayer.addEventListener(
-    "ended",
-    function () {
-
-        nextTrack();
-
-    }
-);
-
-
-// =====================================================
-// SEARCH BUTTON
-// =====================================================
-
-searchBtn.addEventListener(
-    "click",
-    function () {
-
-        searchMusic(
-            searchInput.value
+        console.log(
+            "Waiting for Spotify Web Playback SDK..."
         );
 
+        return;
+
     }
-);
 
 
-// =====================================================
-// SEARCH WITH ENTER
-// =====================================================
+    if (spotifyPlayer) {
 
-searchInput.addEventListener(
-    "keydown",
-    function (event) {
+        return;
 
-        if (event.key === "Enter") {
+    }
 
-            searchMusic(
-                searchInput.value
+
+    spotifyPlayer =
+        new Spotify.Player({
+
+            name: "VibeStream",
+
+            volume:
+                Number(
+                    volumeBar.value
+                ),
+
+            getOAuthToken: async callback => {
+
+                await ensureToken();
+
+                callback(accessToken);
+
+            }
+
+        });
+
+
+    spotifyPlayer.addListener(
+        "ready",
+        ({ device_id }) => {
+
+            deviceId =
+                device_id;
+
+            console.log(
+                "Spotify player ready:",
+                deviceId
             );
 
+            spotifyStatus.textContent =
+                "Spotify connected • Player ready";
+
         }
-
-    }
-);
-
-
-// =====================================================
-// DISCOVER BUTTON
-// =====================================================
-
-discoverBtn.addEventListener(
-    "click",
-    function () {
-
-        searchInput.value =
-            "electronic";
-
-
-        searchMusic(
-            "electronic"
-        );
-
-    }
-);
-
-
-// =====================================================
-// PLAYER BUTTONS
-// =====================================================
-
-playButton.addEventListener(
-    "click",
-    togglePlay
-);
-
-previousButton.addEventListener(
-    "click",
-    previousTrack
-);
-
-nextButton.addEventListener(
-    "click",
-    nextTrack
-);
-
-
-// =====================================================
-// FORMAT TIME
-// =====================================================
-
-function formatTime(seconds) {
-
-    if (
-        !Number.isFinite(seconds) ||
-        seconds < 0
-    ) {
-
-        return "0:00";
-
-    }
-
-
-    const minutes =
-        Math.floor(seconds / 60);
-
-
-    const secondsLeft =
-        Math.floor(seconds % 60);
-
-
-    return (
-        minutes +
-        ":" +
-        String(secondsLeft)
-            .padStart(2, "0")
     );
 
-}
 
-
-// =====================================================
-// HTML SECURITY
-// =====================================================
-
-function escapeHTML(value) {
-
-    return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    spotifyPlayer.connect();
 
 }
-
-
-// =====================================================
-// START VIBESTREAM
-// =====================================================
-
-searchMusic("electronic");
