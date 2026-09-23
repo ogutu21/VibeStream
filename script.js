@@ -1016,7 +1016,7 @@ async function searchMusic(query) {
         // "Invalid limit" error.
 
         const url =
-            `https://api.spotify.com/v1/search?q=${encodedQuery}&type=track&limit=20`;
+            `https://api.spotify.com/v1/search?q=${encodedQuery}&type=track`;
 
 
         const response =
