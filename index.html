@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,7 +11,7 @@
 
 <body>
 
-    <!-- HEADER -->
+    <!-- ================= HEADER ================= -->
     <header class="header">
 
         <div class="logo">
@@ -21,7 +20,6 @@
         </div>
 
         <div class="search-box">
-
             <input
                 type="text"
                 id="searchInput"
@@ -32,20 +30,42 @@
             <button id="searchBtn" type="button">
                 🔍
             </button>
-
         </div>
 
-        <button class="profile-btn" type="button">
+        <button
+            class="spotify-btn"
+            id="spotifyBtn"
+            type="button"
+        >
+            Connect Spotify
+        </button>
+
+        <button
+            class="profile-btn"
+            type="button"
+        >
             👤
         </button>
 
     </header>
 
 
-    <!-- PAGE -->
+    <!-- ================= SPOTIFY STATUS ================= -->
+
+    <div
+        class="spotify-status"
+        id="spotifyStatus"
+    >
+        Spotify not connected
+    </div>
+
+
+    <!-- ================= PAGE ================= -->
+
     <div class="page">
 
-        <!-- SIDEBAR -->
+        <!-- ================= SIDEBAR ================= -->
+
         <aside class="sidebar">
 
             <h4>MENU</h4>
@@ -70,7 +90,9 @@
                 <span>Playlists</span>
             </button>
 
+
             <div class="sidebar-line"></div>
+
 
             <h4>YOUR MUSIC</h4>
 
@@ -87,10 +109,13 @@
         </aside>
 
 
-        <!-- MAIN CONTENT -->
+        <!-- ================= MAIN ================= -->
+
         <main class="main-content">
 
-            <!-- HERO -->
+
+            <!-- ================= HERO ================= -->
+
             <section class="hero">
 
                 <div class="hero-content">
@@ -109,36 +134,53 @@
                         and enjoy your favorite sounds online.
                     </p>
 
-                    <button
-                        class="discover-btn"
-                        id="discoverBtn"
-                        type="button"
-                    >
-                        Start Discovering
-                    </button>
+
+                    <div class="hero-buttons">
+
+                        <button
+                            class="discover-btn"
+                            id="discoverBtn"
+                            type="button"
+                        >
+                            Start Discovering
+                        </button>
+
+                        <button
+                            class="connect-btn"
+                            id="connectMainBtn"
+                            type="button"
+                        >
+                            Connect Spotify
+                        </button>
+
+                    </div>
 
                 </div>
 
             </section>
 
 
-            <!-- MUSIC SECTION -->
+            <!-- ================= MUSIC ================= -->
+
             <section class="music-section">
 
                 <div class="section-heading">
 
                     <div>
-                        <h2>Discover Music</h2>
 
-                        <p>
-                            Find your next favorite track
+                        <h2>
+                            Discover Music
+                        </h2>
+
+                        <p id="resultsText">
+                            Connect Spotify to start listening
                         </p>
+
                     </div>
 
                 </div>
 
 
-                <!-- MUSIC RESULTS -->
                 <div
                     id="musicList"
                     class="music-grid"
@@ -163,10 +205,10 @@
     </div>
 
 
-    <!-- MUSIC PLAYER -->
+    <!-- ================= MUSIC PLAYER ================= -->
+
     <div class="player">
 
-        <!-- CURRENT SONG -->
         <div class="now-playing">
 
             <img
@@ -190,7 +232,6 @@
         </div>
 
 
-        <!-- PLAYER CONTROLS -->
         <div class="player-center">
 
             <div class="player-buttons">
@@ -223,7 +264,6 @@
             </div>
 
 
-            <!-- PROGRESS -->
             <div class="progress-area">
 
                 <span id="currentTime">
@@ -236,7 +276,7 @@
                     min="0"
                     max="100"
                     value="0"
-                    step="0.1"
+                    step="1"
                 >
 
                 <span id="duration">
@@ -248,7 +288,6 @@
         </div>
 
 
-        <!-- VOLUME -->
         <div class="volume-control">
 
             <span>
@@ -269,13 +308,18 @@
     </div>
 
 
-    <!-- AUDIO -->
+    <!-- Hidden HTML audio element -->
+
     <audio id="audioPlayer"></audio>
 
 
-    <!-- JAVASCRIPT -->
+    <!-- Spotify Web Playback SDK -->
+
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+
+    <!-- VibeStream JavaScript -->
+
     <script src="script.js"></script>
 
 </body>
-
 </html>
