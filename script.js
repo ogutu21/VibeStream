@@ -1,3 +1,4 @@
+
 // VibeStream v2 — Jamendo, genres, playlists, queue, shuffle & repeat
 const CLIENT_ID = "17af633d";
 const API = "https://api.jamendo.com/v3.0";
@@ -16,27 +17,34 @@ let repeatMode = "off"; // off | all | one
 // ---------- injected styles for new UI (kept separate from style.css) ----------
 const css = document.createElement("style");
 css.textContent = `
-.vs-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
-.vs-chip{padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;cursor:pointer;font:inherit}
-.vs-chip.active{background:#fff;color:#111}
-.vs-actions{display:flex;gap:6px;margin-top:8px}
-.vs-actions button{background:transparent;border:1px solid rgba(255,255,255,.2);color:inherit;border-radius:8px;padding:4px 8px;cursor:pointer}
-.vs-toggle{background:transparent;border:0;color:inherit;cursor:pointer;opacity:.55;font-size:1rem}
-.vs-toggle.on{opacity:1}
-.vs-panel{position:fixed;right:16px;bottom:110px;width:320px;max-height:50vh;overflow:auto;background:#1b1b22;color:#fff;border-radius:12px;padding:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);z-index:50;display:none}
+.vs-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 22px}
+.vs-chip{padding:7px 15px;border-radius:24px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;font-size:13px;transition:.2s ease}
+.vs-chip:hover{background:var(--card-hover);color:var(--text)}
+.vs-chip.active{background:var(--green);border-color:var(--green);color:#000;font-weight:bold}
+.card-actions{display:flex;gap:2px;align-items:center}
+.card-actions button{background:transparent;border:none;color:#777;cursor:pointer;font-size:17px;padding:4px 6px}
+.card-actions button:hover{color:var(--text)}
+.card-actions .favorite-button.on{color:var(--danger)}
+.player-buttons .vs-toggle{opacity:.5;font-size:15px}
+.player-buttons .vs-toggle.on{opacity:1;color:var(--green)}
+.vs-panel{position:fixed;right:20px;bottom:108px;width:min(340px,calc(100vw - 40px));max-height:50vh;overflow:auto;background:var(--background-light);border:1px solid var(--border);border-radius:10px;padding:12px;z-index:1900;display:none;box-shadow:0 10px 30px rgba(0,0,0,.6)}
 .vs-panel.open{display:block}
-.vs-panel h4{margin:0 0 8px}
-.vs-q-item{display:block;width:100%;text-align:left;background:transparent;border:0;color:inherit;padding:8px;border-radius:8px;cursor:pointer;font:inherit}
-.vs-q-item:hover{background:rgba(255,255,255,.08)}
-.vs-q-item.now{background:rgba(255,255,255,.16)}
-.vs-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100}
-.vs-modal{background:#1b1b22;color:#fff;border-radius:14px;padding:18px;width:min(340px,90vw);max-height:70vh;overflow:auto}
-.vs-modal h3{margin:0 0 10px}
-.vs-modal button{display:block;width:100%;text-align:left;margin:6px 0;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:transparent;color:inherit;cursor:pointer;font:inherit}
-.vs-row{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:12px;border:1px solid rgba(255,255,255,.15);border-radius:10px}
-.vs-row span{flex:1}
-.vs-row button,.vs-wide button{background:transparent;border:1px solid rgba(255,255,255,.25);color:inherit;border-radius:8px;padding:6px 12px;cursor:pointer}
+.vs-panel h4{font-size:11px;letter-spacing:1.5px;color:#666;margin:0 0 8px}
+.vs-panel p{color:var(--muted);font-size:13px}
+.vs-q-item{display:block;width:100%;text-align:left;background:transparent;border:0;color:#ccc;padding:9px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vs-q-item:hover{background:var(--card-hover);color:var(--text)}
+.vs-q-item.now{color:var(--green);background:#1d1d1d}
+.vs-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:3000}
+.vs-modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;width:min(340px,90vw);max-height:70vh;overflow:auto}
+.vs-modal h3{margin:0 0 12px;font-size:16px}
+.vs-modal button{display:block;width:100%;text-align:left;margin:6px 0;padding:11px 12px;border-radius:8px;border:1px solid var(--border);background:var(--background-light);color:var(--text);cursor:pointer;font-size:14px;transition:.2s ease}
+.vs-modal button:hover{background:var(--card-hover);border-color:var(--green)}
+.vs-row{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.vs-row span{flex:1;font-size:14px}
+.vs-row button,.vs-wide button{background:transparent;border:1px solid #333;color:var(--text);border-radius:24px;padding:8px 16px;cursor:pointer;font-size:13px;transition:.2s ease}
+.vs-row button:hover,.vs-wide button:hover{border-color:var(--green);color:var(--green)}
 .vs-wide{grid-column:1/-1}
+@media(max-width:600px){.vs-panel{bottom:135px}}
 `;
 document.head.appendChild(css);
 
@@ -125,7 +133,11 @@ async function load(label, params) {
   } catch (err) {
     console.error(err);
     resultsText.textContent = "Could not load music";
-    listEl.textContent = "Request failed. Check your connection and the browser console.";
+    listEl.innerHTML = "";
+    const box = document.createElement("div");
+    box.className = "error-message";
+    box.textContent = "Couldn't load music. Check your connection and the browser console.";
+    listEl.appendChild(box);
   }
 }
 
@@ -139,6 +151,17 @@ function button(text, onClick, title) {
   return b;
 }
 
+function emptyMsg(title, text) {
+  const d = document.createElement("div");
+  d.className = "empty-message";
+  const h = document.createElement("h3");
+  h.textContent = title;
+  const p = document.createElement("p");
+  p.textContent = text;
+  d.append(h, p);
+  return d;
+}
+
 function render(tracks, label, ctx = {}) {
   queue = tracks;
   listEl.innerHTML = "";
@@ -150,38 +173,44 @@ function render(tracks, label, ctx = {}) {
     back.appendChild(button("← All playlists", showPlaylists));
     listEl.appendChild(back);
   }
+  if (!tracks.length) {
+    listEl.appendChild(emptyMsg("Nothing here yet", "Songs you favorite, play, or add will show up here."));
+  }
   tracks.forEach((t, i) => listEl.appendChild(card(t, i, ctx)));
 }
 
 function card(track, i, ctx) {
   const el = document.createElement("div");
   el.className = "music-card";
-  el.style.cursor = "pointer";
 
   const img = document.createElement("img");
+  img.className = "music-image";
   img.src = track.image;
   img.alt = "";
   img.loading = "lazy";
-  img.style.width = "100%";
-  img.style.borderRadius = "8px";
 
   const title = document.createElement("h3");
   title.textContent = track.name;
   const artist = document.createElement("p");
   artist.textContent = track.artist_name;
 
+  const bottom = document.createElement("div");
+  bottom.className = "card-bottom";
+
+  const play = button("▶", () => startFrom(i), "Play");
+  play.className = "play-card";
+
   const actions = document.createElement("div");
-  actions.className = "vs-actions";
-  actions.appendChild(button(isFav(track.id) ? "❤️" : "🤍", (b) => {
+  actions.className = "card-actions";
+
+  const fav = button(isFav(track.id) ? "♥" : "♡", () => {
     toggleFav(track);
-    b.textContent = isFav(track.id) ? "❤️" : "🤍";
-  }, "Favorite"));
-  actions.appendChild(button("➕", () => pickPlaylist(track), "Add to playlist"));
-  actions.appendChild(button("⏭", () => {
-    if (!playQueue.length) { startFrom(i); return; }
-    playQueue.splice(current + 1, 0, track);
-    renderQueuePanel();
-  }, "Play next"));
+    fav.textContent = isFav(track.id) ? "♥" : "♡";
+    fav.classList.toggle("on", isFav(track.id));
+  }, "Favorite");
+  fav.className = "favorite-button" + (isFav(track.id) ? " on" : "");
+  actions.appendChild(fav);
+  actions.appendChild(button("＋", () => pickPlaylist(track), "Add to playlist or queue"));
   if (ctx.playlistId) {
     actions.appendChild(button("✕", () => {
       removeFromPlaylist(ctx.playlistId, track.id);
@@ -189,7 +218,8 @@ function card(track, i, ctx) {
     }, "Remove from playlist"));
   }
 
-  el.append(img, title, artist, actions);
+  bottom.append(play, actions);
+  el.append(img, title, artist, bottom);
   el.addEventListener("click", () => startFrom(i));
   return el;
 }
@@ -204,6 +234,12 @@ function pickPlaylist(track) {
   h.textContent = "Add to playlist";
   modal.appendChild(h);
   const close = () => overlay.remove();
+
+  modal.appendChild(button("⏭ Play next", () => {
+    if (!playQueue.length) { playQueue = [track]; playIndex(0); }
+    else { playQueue.splice(current + 1, 0, track); renderQueuePanel(); }
+    close();
+  }));
 
   getPls().forEach((pl) => {
     modal.appendChild(button(`${pl.name} (${pl.tracks.length})`, () => {
@@ -237,10 +273,7 @@ function showPlaylists() {
 
   const pls = getPls();
   if (!pls.length) {
-    const empty = document.createElement("p");
-    empty.className = "vs-wide";
-    empty.textContent = "No playlists yet. Create one, then use ➕ on any song to add it.";
-    listEl.appendChild(empty);
+    listEl.appendChild(emptyMsg("No playlists yet", "Create one, then use ＋ on any song to add it."));
   }
   pls.forEach((pl) => {
     const row = document.createElement("div");
@@ -364,9 +397,11 @@ const panel = document.createElement("div");
 panel.className = "vs-panel";
 document.body.appendChild(panel);
 
-const queueBtn = button("☰", () => panel.classList.toggle("open"), "Up next");
-queueBtn.className = "vs-toggle on";
-document.querySelector(".volume-control").prepend(queueBtn);
+const queueBtn = button("☰", () => {
+  queueBtn.classList.toggle("on", panel.classList.toggle("open"));
+}, "Up next");
+queueBtn.className = "vs-toggle";
+buttons.append(queueBtn);
 
 function renderQueuePanel() {
   panel.innerHTML = "";
